@@ -105,3 +105,37 @@ class CTOAgent(BaseAgent):
 
         response = await self._llm_think(prompt, {})
         return {"diagnosis": response}
+
+    async def evolve(self, state: SiliconState) -> dict[str, Any]:
+        """
+        触发进化巡检 — CTO 扫描系统，发现改进点。
+        """
+        await self.initialize()
+
+        from src.platforms.tech_lab.evolution_engine import EvolutionEngine
+        engine = EvolutionEngine()
+
+        # 扫描 Skill 覆盖
+        scan_result = await engine.scan_skills()
+
+        prompt = (
+            f"系统 Skill 扫描结果:\n{scan_result}\n\n"
+            f"作为 CTO，基于扫描结果:\n"
+            f"1. 列出最需要改进的 3 个方向\n"
+            f"2. 每个方向给出具体方案\n"
+            f"3. 标注优先级 (P0/P1/P2)\n"
+        )
+
+        analysis = await self._llm_think(prompt, {})
+        return {"evolution_scan": scan_result, "analysis": analysis}
+
+    async def deploy_new_agent(self, spec: dict[str, Any]) -> dict[str, Any]:
+        """
+        部署新智能体 — 通过 Evolution Engine 生成代码。
+        """
+        await self.initialize()
+
+        from src.platforms.tech_lab.evolution_engine import EvolutionEngine
+        engine = EvolutionEngine()
+        result = await engine.deploy_agent(spec)
+        return result
