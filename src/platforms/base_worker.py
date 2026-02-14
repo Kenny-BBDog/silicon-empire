@@ -69,8 +69,12 @@ class PlatformWorker(BaseAgent):
             )
             return result
 
-        # Fallback: free-form execution
-        result = await self._execute_freeform(task)
+        # Fallback: persistent execution (retry + decompose + escalate)
+        try:
+            from src.core.persistence import persistent_execute
+            result = await persistent_execute(self, task)
+        except Exception:
+            result = await self._execute_freeform(task)
         return result
 
     async def _execute_freeform(self, task: dict[str, Any]) -> dict[str, Any]:

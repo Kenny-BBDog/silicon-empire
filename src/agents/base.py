@@ -169,10 +169,74 @@ class BaseAgent:
         return {"skill_used": skill.name, "result": result}
 
     async def _free_think(self, state: SiliconState) -> dict[str, Any]:
-        """Free-form reasoning when no Skill matches."""
+        """Free-form reasoning — persistent, self-correcting, collaborative."""
         context = self._build_context(state)
-        response = await self._llm_think(context, {})
+
+        # 使用持久化思考 — 不是问一次就完事
+        try:
+            from src.core.persistence import persistent_think
+            response = await persistent_think(self, context, {})
+        except Exception:
+            # Fallback to simple think
+            response = await self._llm_think(context, {})
+
         return {"thinking": response}
+
+    # ─── Inter-Agent Communication ───
+
+    async def check_inbox(self) -> list[dict]:
+        """检查收件箱 — 处理其他 Agent 发来的消息。"""
+        from src.core.agent_bus import get_inbox
+        messages = get_inbox(self.ROLE)
+        results = []
+
+        for msg in messages:
+            if msg.msg_type == "question":
+                # 其他 Agent 问我问题 — 回答
+                answer = await self._llm_think(
+                    f"{msg.sender} 问你: {msg.content}\n\n"
+                    f"用你的专业知识简洁回答。",
+                    {}
+                )
+                from src.core.agent_bus import report_up
+                report_up(self.ROLE, msg.sender, answer)
+                results.append({"from": msg.sender, "question": msg.content, "answer": answer})
+
+            elif msg.msg_type == "task":
+                # 上级委派任务 — 执行
+                await self._memory.think(
+                    f"收到 {msg.sender} 委派: {msg.content[:80]}",
+                    importance=6,
+                )
+                results.append({"from": msg.sender, "task": msg.content, "status": "queued"})
+
+            elif msg.msg_type == "report":
+                # 下属汇报 — 记住
+                await self._memory.think(
+                    f"{msg.sender} 汇报: {msg.content[:80]}",
+                    importance=5,
+                )
+                results.append({"from": msg.sender, "report": msg.content[:200]})
+
+        return results
+
+    async def delegate_to(self, target_role: str, task_desc: str, params: dict | None = None):
+        """委派任务给其他 Agent (通常是 L2→L3)。"""
+        from src.core.agent_bus import delegate_task
+        delegate_task(self.ROLE, target_role, task_desc, params)
+        await self._memory.think(
+            f"委派任务给 {target_role}: {task_desc[:60]}",
+            importance=4,
+        )
+
+    async def ask_peer(self, target_role: str, question: str) -> None:
+        """向其他 Agent 提问。"""
+        from src.core.agent_bus import ask
+        ask(self.ROLE, target_role, question)
+        await self._memory.think(
+            f"向 {target_role} 请教: {question[:60]}",
+            importance=3,
+        )
 
     # ─── Meeting Participation ───
 
