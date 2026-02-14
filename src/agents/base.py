@@ -108,6 +108,7 @@ class BaseAgent:
         1. Try to match a Skill for the current intent
         2. If matched → execute Skill workflow
         3. If not → free-form LLM reasoning with MCP tools
+        4. After task → run lifecycle hooks (auto-reflect on needs)
         """
         await self.initialize()
 
@@ -117,22 +118,41 @@ class BaseAgent:
             importance=4,
         )
 
-        # Try Skill match
-        skill = match_skill(
-            self._skills,
-            state.intent_category,
-            state.strategic_intent,
-        )
-
-        if skill:
-            result = await self._execute_skill(skill, state)
-            await self._memory.think(
-                f"使用了 Skill [{skill.name}] 完成任务",
-                importance=5,
+        result = {}
+        try:
+            # Try Skill match
+            skill = match_skill(
+                self._skills,
+                state.intent_category,
+                state.strategic_intent,
             )
-            return result
-        else:
-            return await self._free_think(state)
+
+            if skill:
+                result = await self._execute_skill(skill, state)
+                await self._memory.think(
+                    f"使用了 Skill [{skill.name}] 完成任务",
+                    importance=5,
+                )
+            else:
+                result = await self._free_think(state)
+
+            # ── Hook: after_task — 任务完成后自动反思 ──
+            try:
+                from src.core.hooks import after_task_hook
+                await after_task_hook(self, result, {"intent": state.strategic_intent})
+            except Exception:
+                pass  # Hook failure never blocks
+
+        except Exception as e:
+            # ── Hook: on_error — 出错后自动诊断 ──
+            try:
+                from src.core.hooks import on_error_hook
+                await on_error_hook(self, e, {"intent": state.strategic_intent})
+            except Exception:
+                pass
+            raise
+
+        return result
 
     async def _execute_skill(self, skill: Skill, state: SiliconState) -> dict[str, Any]:
         """Execute a matched Skill."""
