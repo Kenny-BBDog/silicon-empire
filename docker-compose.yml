@@ -1,0 +1,52 @@
+# Silicon-Empire Docker Compose — 本地开发环境
+# Usage: docker compose up -d
+
+services:
+  # === Redis (消息队列 + 短期记忆) ===
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # === n8n (编排总线 — 飞书 Webhook 桥) ===
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=silicon-empire
+      - GENERIC_TIMEZONE=Asia/Shanghai
+      - N8N_SECURE_COOKIE=false
+      - WEBHOOK_URL=http://localhost:5678/
+    volumes:
+      - n8n-data:/home/node/.n8n
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # === RPA API (Playwright 微服务) ===
+  rpa-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.rpa
+    ports:
+      - "8100:8100"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+  n8n-data:

@@ -1,0 +1,50 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.supabase_server"],
+      "env": {},
+      "description": "数据库读写 (12 tools, 6 表覆盖)"
+    },
+    "playwright": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.playwright_server"],
+      "env": {
+        "RPA_API_URL": "http://localhost:8001"
+      },
+      "description": "浏览器自动化 (5 tools, 爬虫/RPA)"
+    },
+    "feishu": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.feishu_server"],
+      "env": {},
+      "description": "飞书消息 (4 tools, 6-bot)"
+    },
+    "gmail": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.gmail_server"],
+      "env": {},
+      "description": "邮件 (4 tools)"
+    },
+    "shopify": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.shopify_server"],
+      "env": {},
+      "description": "电商 (4 tools, Shopify Admin API)"
+    },
+    "filesystem": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.filesystem_server"],
+      "env": {
+        "PROJECT_ROOT": "."
+      },
+      "description": "文件读写 (3 tools, 沙盒限制)"
+    },
+    "redis": {
+      "command": "python",
+      "args": ["-m", "src.mcp_servers.redis_server"],
+      "env": {},
+      "description": "Redis pub/sub + 上下文 (3 tools)"
+    }
+  }
+}

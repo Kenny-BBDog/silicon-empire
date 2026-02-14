@@ -1,0 +1,55 @@
+name: tool_diagnosis
+display_name: "工具诊断"
+owner: CTO
+version: "1.0"
+description: |
+  当 L3 中台工具报错时，CTO 诊断错误原因并决定修复策略。
+  支持重试、代码重构、配置修复三种修复路径。
+
+triggers:
+  - intent: "TECH_FIX"
+  - keyword: ["报错", "挂了", "修复", "broken", "error"]
+
+requires_mcp:
+  - supabase
+  - filesystem
+
+steps:
+  - id: fetch_tool_status
+    name: "获取工具状态"
+    action: call_mcp
+    server: supabase
+    tool: read_tool_registry
+    params:
+      status: "BROKEN"
+    output: broken_tools
+
+  - id: analyze_error
+    name: "分析错误日志"
+    action: llm_think
+    prompt: |
+      分析以下工具的错误日志：
+      
+      {{broken_tools}}
+      
+      判断：
+      1. RETRY: 临时故障 (网络超时/限流/503)
+      2. REBUILD: 逻辑错误 (API 变更/反爬/返回格式变化)
+      3. CONFIG_FIX: 配置问题 (Key 过期/URL 变更)
+      
+      给出每个工具的诊断和建议修复策略。
+    context: [broken_tools]
+    output: diagnosis
+
+  - id: plan_fix
+    name: "制定修复计划"
+    action: llm_think
+    prompt: |
+      基于诊断结果，制定修复计划：
+      
+      | 工具 | 诊断 | 修复策略 | 预计耗时 | 优先级 |
+      |:---|:---|:---|:---|:---|
+      
+      如需 REBUILD，请描述需要生成的新代码逻辑。
+    context: [diagnosis]
+    output: fix_plan

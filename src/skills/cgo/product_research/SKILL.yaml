@@ -1,0 +1,89 @@
+name: product_research
+display_name: "选品调研六步法"
+owner: CGO
+version: "1.0"
+description: |
+  对目标品类进行系统性调研，产出选品报告。
+  覆盖市场规模、竞品分析、差评痛点、利润预估、合规预审。
+
+triggers:
+  - intent: "PRODUCT_LAUNCH"
+  - intent: "NEW_CATEGORY"
+  - keyword: ["选品", "调研", "找产品", "什么好卖"]
+
+requires_mcp:
+  - supabase
+  - playwright
+
+steps:
+  - id: define_scope
+    name: "界定调研范围"
+    action: llm_think
+    prompt: |
+      基于用户意图，确定：
+      1. 目标品类关键词 (3-5个)
+      2. 目标平台 (Amazon/TikTok/Shopify)
+      3. 目标市场 (US/EU/Global)
+      4. 价格带 (低/中/高端)
+      输出为结构化 JSON。
+    output: scope_definition
+
+  - id: gather_market_data
+    name: "市场数据采集"
+    action: call_mcp
+    server: playwright
+    tool: scrape_amazon_category
+    params:
+      keywords: "{{scope_definition.keywords}}"
+      platform: "{{scope_definition.platform}}"
+      top_n: 20
+    output: market_data
+
+  - id: check_history
+    name: "历史数据比对"
+    action: call_mcp
+    server: supabase
+    tool: search_products_vector
+    params:
+      query: "{{scope_definition.keywords}}"
+      top_k: 10
+    output: historical_products
+
+  - id: deep_analysis
+    name: "深度分析"
+    action: llm_think
+    prompt: |
+      基于市场数据和历史记录，分析：
+      - 市场总量 (TAM) 和增长率
+      - Top 10 竞品的价格带分布
+      - 差评痛点 TOP 5 (消费者投诉)
+      - 差异化机会 (功能/价格/设计)
+      - 建议切入角度
+    context: [market_data, historical_products]
+    output: analysis_report
+
+  - id: cost_precheck
+    name: "成本预估"
+    action: delegate
+    to: COO
+    skill: cost_analysis
+    params:
+      category: "{{scope_definition.category}}"
+      target_price: "{{analysis_report.suggested_price}}"
+    output: cost_estimate
+
+  - id: compile_report
+    name: "汇编选品报告"
+    action: llm_think
+    prompt: |
+      将以上所有数据汇编为 CGO 选品报告，格式：
+      ## 机会概述
+      ## 市场数据
+      ## 竞品分析
+      ## 差评痛点
+      ## 利润空间
+      ## 增长策略
+      ## 风险容忍声明
+    context: [scope_definition, analysis_report, cost_estimate]
+    output: final_report
+    write_to: proposal_buffer

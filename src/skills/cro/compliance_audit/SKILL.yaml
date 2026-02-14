@@ -1,0 +1,53 @@
+name: compliance_audit
+display_name: "合规审计"
+owner: CRO
+version: "1.0"
+description: |
+  对提案进行全面合规审查。
+  检查平台政策、知识产权、违禁词、历史处罚案例。
+
+triggers:
+  - intent: "PRODUCT_LAUNCH"
+  - keyword: ["合规", "风险", "审查", "侵权"]
+
+requires_mcp:
+  - supabase
+
+steps:
+  - id: policy_search
+    name: "政策检索"
+    action: call_mcp
+    server: supabase
+    tool: search_policies_vector
+    params:
+      query: "{{proposal_content}}"
+      top_k: 10
+    output: relevant_policies
+
+  - id: ip_check
+    name: "知产风险检查"
+    action: llm_think
+    prompt: |
+      基于产品信息和检索到的政策条款，检查：
+      1. 品类是否允许 (引用具体条款)
+      2. 外观专利风险
+      3. 商标冲突
+      4. 文案违禁词检测
+      
+      **必须引用具体政策编号和原文**。
+    context: [relevant_policies]
+    output: ip_report
+
+  - id: risk_scoring
+    name: "风险评分"
+    action: llm_think
+    prompt: |
+      基于合规检查结果，给出：
+      - 综合风险分: X/5
+      - 风险等级: LOW (1-2) / MEDIUM (3) / HIGH (4) / CRITICAL (5)
+      - 每个风险点的详细说明
+      - 最终 verdict: APPROVE / REJECT / VETO
+      
+      风险分 >= 4 必须 VETO。
+    context: [ip_report]
+    output: risk_verdict

@@ -1,0 +1,75 @@
+name: cost_analysis
+display_name: "成本精算"
+owner: COO
+version: "1.0"
+description: |
+  对产品进行全链路成本核算，输出利润率和盈亏平衡点。
+  覆盖采购、运费、仓储、佣金、广告等所有成本项。
+
+triggers:
+  - intent: "PRODUCT_LAUNCH"
+  - keyword: ["成本", "利润", "算账", "核算"]
+
+requires_mcp:
+  - supabase
+
+steps:
+  - id: gather_cost_inputs
+    name: "采集成本参数"
+    action: llm_think
+    prompt: |
+      基于产品信息，列出所有需要核算的成本项：
+      1. 采购成本 (FOB/CIF)
+      2. 头程运费 (海运/空运)
+      3. FBA/自发货仓储费
+      4. 平台佣金 (按平台不同)
+      5. 广告费 (ACoS 预估)
+      6. 退货损耗
+      7. 关税 (如适用)
+      输出为结构化表格。
+    output: cost_inputs
+
+  - id: check_supplier_prices
+    name: "查询供应商报价"
+    action: call_mcp
+    server: supabase
+    tool: query_suppliers
+    params:
+      category: "{{cost_inputs.category}}"
+    output: supplier_data
+
+  - id: calculate_pnl
+    name: "P&L 建模"
+    action: llm_think
+    prompt: |
+      基于成本参数和供应商报价，计算：
+      
+      | 项目 | 金额 |
+      |:---|:---|
+      | 采购成本 | $X.XX |
+      | 头程运费 | $X.XX |
+      | FBA费用 | $X.XX |
+      | 平台佣金 | $X.XX |
+      | 广告预估 | $X.XX |
+      | 总成本 | $X.XX |
+      
+      - 目标售价: $XX.XX
+      - 毛利: $XX.XX (XX%)
+      - 净利: $XX.XX (XX%)
+      - 盈亏平衡: XXX 单
+      - 回本周期: XX 天
+      
+      精确到小数点后两位。
+    context: [cost_inputs, supplier_data]
+    output: pnl_report
+
+  - id: verdict
+    name: "成本结论"
+    action: llm_think
+    prompt: |
+      基于 P&L 模型，给出最终判断：
+      - 净利率 > 20%: APPROVE
+      - 净利率 15-20%: 建议调整售价
+      - 净利率 < 15%: REJECT
+    context: [pnl_report]
+    output: cost_verdict

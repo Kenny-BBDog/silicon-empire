@@ -1,0 +1,107 @@
+# ============================================
+# Silicon-Empire Docker Compose (Production)
+# ============================================
+# 启动: docker-compose -f docker-compose.prod.yml up -d
+# ============================================
+
+version: "3.9"
+
+services:
+  # ─── PostgreSQL + pgvector ───
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: silicon-empire-pg
+    environment:
+      POSTGRES_DB: silicon_empire
+      POSTGRES_USER: silicon
+      POSTGRES_PASSWORD: silicon2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U silicon -d silicon_empire" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Core API ───
+  silicon-empire:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: silicon-empire-api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://silicon:silicon2026@postgres:5432/silicon_empire
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Feishu 长连接监听 ───
+  feishu-listener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: silicon-empire-feishu
+    command: python -m src.integrations.feishu_webhook
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://silicon:silicon2026@postgres:5432/silicon_empire
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - silicon-empire
+    restart: unless-stopped
+
+  # ─── Redis ───
+  redis:
+    image: redis:7-alpine
+    container_name: silicon-empire-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── n8n (Workflow Automation) ───
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: silicon-empire-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=silicon-empire
+      - WEBHOOK_URL=http://n8n:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - silicon-empire
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:
+  n8n_data:
