@@ -186,44 +186,44 @@ class BaseAgent:
 
     async def check_inbox(self) -> list[dict]:
         """检查收件箱 — 处理其他 Agent 发来的消息。"""
-        from src.core.agent_bus import get_inbox
-        messages = get_inbox(self.ROLE)
+        await self.initialize()
+        from src.core.agent_bus import get_inbox, report_up
+        messages = await get_inbox(self.ROLE)
         results = []
 
         for msg in messages:
-            if msg.msg_type == "question":
+            if msg.get("msg_type") == "question":
                 # 其他 Agent 问我问题 — 回答
                 answer = await self._llm_think(
-                    f"{msg.sender} 问你: {msg.content}\n\n"
+                    f"{msg['sender']} 问你: {msg['content']}\n\n"
                     f"用你的专业知识简洁回答。",
                     {}
                 )
-                from src.core.agent_bus import report_up
-                report_up(self.ROLE, msg.sender, answer)
-                results.append({"from": msg.sender, "question": msg.content, "answer": answer})
+                await report_up(self.ROLE, msg["sender"], answer)
+                results.append({"from": msg["sender"], "question": msg["content"], "answer": answer})
 
-            elif msg.msg_type == "task":
+            elif msg.get("msg_type") == "task":
                 # 上级委派任务 — 执行
                 await self._memory.think(
-                    f"收到 {msg.sender} 委派: {msg.content[:80]}",
+                    f"收到 {msg['sender']} 委派: {msg['content'][:80]}",
                     importance=6,
                 )
-                results.append({"from": msg.sender, "task": msg.content, "status": "queued"})
+                results.append({"from": msg["sender"], "task": msg["content"], "status": "queued"})
 
-            elif msg.msg_type == "report":
+            elif msg.get("msg_type") == "report":
                 # 下属汇报 — 记住
                 await self._memory.think(
-                    f"{msg.sender} 汇报: {msg.content[:80]}",
+                    f"{msg['sender']} 汇报: {msg['content'][:80]}",
                     importance=5,
                 )
-                results.append({"from": msg.sender, "report": msg.content[:200]})
+                results.append({"from": msg["sender"], "report": msg["content"][:200]})
 
         return results
 
     async def delegate_to(self, target_role: str, task_desc: str, params: dict | None = None):
         """委派任务给其他 Agent (通常是 L2→L3)。"""
         from src.core.agent_bus import delegate_task
-        delegate_task(self.ROLE, target_role, task_desc, params)
+        await delegate_task(self.ROLE, target_role, task_desc, params)
         await self._memory.think(
             f"委派任务给 {target_role}: {task_desc[:60]}",
             importance=4,
@@ -232,7 +232,7 @@ class BaseAgent:
     async def ask_peer(self, target_role: str, question: str) -> None:
         """向其他 Agent 提问。"""
         from src.core.agent_bus import ask
-        ask(self.ROLE, target_role, question)
+        await ask(self.ROLE, target_role, question)
         await self._memory.think(
             f"向 {target_role} 请教: {question[:60]}",
             importance=3,
@@ -349,7 +349,7 @@ class BaseAgent:
     # ─── LLM Interface ───
 
     async def _llm_think(self, prompt: str, context: dict[str, Any]) -> str:
-        """Invoke LLM with system prompt + personal memory context."""
+        """Invoke LLM with system prompt + personal memory + shared knowledge."""
         llm = get_llm(self.LLM_ROLE)
 
         # 注入个人记忆: 让 Agent "记起自己的经历"
@@ -359,10 +359,21 @@ class BaseAgent:
         except Exception:
             pass
 
-        system_with_memory = self._prompt + memory_ctx
+        # 注入公司知识库: 让 Agent "知道公司的集体智慧"
+        knowledge_ctx = ""
+        try:
+            from src.core.knowledge_base import get_knowledge_base
+            kb = await get_knowledge_base()
+            knowledge_ctx = await kb.recall_for_context(prompt[:200])
+        except Exception:
+            pass
+
+        system_full = self._prompt + memory_ctx
+        if knowledge_ctx:
+            system_full += "\n\n---\n" + knowledge_ctx + "\n---\n"
 
         messages = [
-            SystemMessage(content=system_with_memory),
+            SystemMessage(content=system_full),
             HumanMessage(content=prompt),
         ]
 
