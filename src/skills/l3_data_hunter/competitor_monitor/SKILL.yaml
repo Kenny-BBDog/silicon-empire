@@ -1,0 +1,50 @@
+name: competitor_monitor
+display_name: "竞品监控"
+owner: l3_data_hunter
+version: "1.0"
+description: |
+  持续监控竞品动态：价格变化、新品上架、评分波动。
+  发现异常时自动上报 CGO。
+
+triggers:
+  - schedule: "every_12h"
+  - keyword: ["竞品", "对手", "竞争", "价格变了"]
+
+requires_mcp:
+  - playwright
+
+steps:
+  - id: load_watchlist
+    name: "加载监控列表"
+    action: call_db
+    query: "SELECT * FROM products WHERE competitor_tracking = TRUE"
+    output: watchlist
+
+  - id: crawl_competitors
+    name: "爬取竞品数据"
+    action: call_mcp
+    server: playwright
+    tool: scrape_product_pages
+    params:
+      urls: "{{watchlist.competitor_urls}}"
+    output: competitor_data
+
+  - id: detect_changes
+    name: "检测变化"
+    action: llm_think
+    prompt: |
+      对比竞品最新数据与历史数据，检测异常:
+      - 价格变动 > 10%
+      - 新增/下架产品
+      - 评分大幅波动
+      - 新的营销策略
+      对每个变化给出: 严重程度、我方应对建议
+    context: [watchlist, competitor_data]
+    output: change_alerts
+
+  - id: alert_if_needed
+    name: "异常上报"
+    action: report_up
+    to: CGO
+    condition: "{{change_alerts.has_critical}}"
+    content: "{{change_alerts}}"

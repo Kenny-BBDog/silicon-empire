@@ -1,0 +1,67 @@
+name: supplier_eval
+display_name: "供应商评估"
+owner: l3_sourcing_liaison
+version: "1.0"
+description: |
+  对供应商进行系统性评估：价格、质量、交货、售后。
+  生成评估报告并推荐最优供应商。
+
+triggers:
+  - keyword: ["供应商", "工厂", "报价", "采购", "1688"]
+  - intent: "SOURCING"
+
+requires_mcp:
+  - playwright
+
+steps:
+  - id: search_suppliers
+    name: "供应商搜索"
+    action: call_mcp
+    server: playwright
+    tool: search_1688
+    params:
+      keywords: "{{product_keywords}}"
+      sort: "repurchase_rate"
+      min_years: 3
+    output: supplier_list
+
+  - id: compare_quotes
+    name: "报价对比"
+    action: llm_think
+    prompt: |
+      对比供应商报价:
+      1. 单价对比 (含MOQ分档)
+      2. 运费估算
+      3. 定制费用
+      4. 付款条件 (30/60/90天)
+      输出一个价格对比表
+    context: [supplier_list]
+    output: price_comparison
+
+  - id: risk_assessment
+    name: "风险评估"
+    action: llm_think
+    prompt: |
+      评估供应商风险:
+      - 经营年限 & 注册资本
+      - 平台评分 & 回头客率
+      - 交货准时率 (如有数据)
+      - 样品质量反馈
+      - 地理位置风险 (物流/灾害)
+      每个供应商给出 1-10 风险分
+    context: [supplier_list, price_comparison]
+    output: risk_report
+
+  - id: recommend
+    name: "推荐+上报"
+    action: llm_think
+    prompt: |
+      综合价格和风险，推荐 TOP 3 供应商:
+      1. 最佳性价比
+      2. 最稳定可靠
+      3. 最能灵活定制
+      给出每个的理由和谈判策略
+    context: [price_comparison, risk_report]
+    output: recommendation
+    write_to: artifacts
+    report_to: COO

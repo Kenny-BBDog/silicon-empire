@@ -1,0 +1,63 @@
+name: review_response
+display_name: "客户评论回复"
+owner: l3_customer_success
+version: "1.0"
+description: |
+  分析客户评论 (好评/差评)，自动生成专业回复。
+  差评自动升级为工单。
+
+triggers:
+  - keyword: ["评论", "客诉", "差评", "review", "反馈"]
+  - schedule: "every_12h"
+
+requires_mcp:
+  - shopify
+
+steps:
+  - id: fetch_reviews
+    name: "拉取最新评论"
+    action: call_mcp
+    server: shopify
+    tool: get_recent_reviews
+    params:
+      hours: 12
+      min_rating: 1
+    output: reviews
+
+  - id: classify_sentiment
+    name: "情感分类"
+    action: llm_think
+    prompt: |
+      对每条评论进行分类:
+      - positive: 好评 (4-5星)
+      - neutral: 中性 (3星)
+      - negative: 差评 (1-2星)
+      - urgent: 需要紧急处理的问题
+      标记出差评中的共性问题
+    context: [reviews]
+    output: classified
+
+  - id: generate_replies
+    name: "生成回复"
+    action: llm_think
+    prompt: |
+      为每条评论生成回复:
+      
+      好评: 感谢 + 鼓励复购，语气轻松
+      中性: 感谢 + 询问改进方向，语气关切
+      差评: 道歉 + 解决方案 + 补偿提案，语气诚恳
+      紧急: 标红处理，优先级最高
+      
+      每条回复控制在 100 字以内，风格专业但亲切
+    context: [classified]
+    output: replies
+
+  - id: escalate_issues
+    name: "升级问题"
+    action: report_up
+    to: CRO
+    condition: "{{classified.has_urgent}}"
+    content: |
+      发现需要紧急处理的客诉:
+      {{classified.urgent_items}}
+      建议行动: {{replies.urgent_actions}}

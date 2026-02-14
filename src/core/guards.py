@@ -46,6 +46,10 @@ def auto_judge(state: SiliconState) -> str:
     """
     Auto-judge logic for Async Joint Session.
     
+    Now respects autonomy level:
+    - Level 0: always escalate
+    - Level 1+: use capability-weighted consensus
+    
     Returns:
         "auto_approve" — All conditions met, proceed
         "escalate" — Serious disagreement, escalate to Adversarial Hearing
@@ -83,28 +87,28 @@ def auto_judge(state: SiliconState) -> str:
 # Which MCP servers each role can access, and with what permissions
 MCP_PERMISSIONS: dict[str, dict[str, str]] = {
     "gm": {
-        "supabase": "read_write:decisions",
+        "postgres": "read_write:decisions",
         "redis": "read_write",
         "feishu": "send_card,send_message",
     },
     "cgo": {
-        "supabase": "read:products,suppliers",
+        "postgres": "read:products,suppliers",
         "playwright": "scrape",
         "redis": "read_write",
     },
     "coo": {
-        "supabase": "read:all,write:decisions",
+        "postgres": "read:all,write:decisions",
         "redis": "read_write",
         "shopify": "read:orders",
     },
     "cro": {
-        "supabase": "read:policies,products",
+        "postgres": "read:policies,products",
         "playwright": "detect",
         "redis": "read_write",
         "feishu": "send_alert",
     },
     "cto": {
-        "supabase": "read_write:tool_registry",
+        "postgres": "read_write:tool_registry",
         "playwright": "debug",
         "filesystem": "full",
         "redis": "read_write",

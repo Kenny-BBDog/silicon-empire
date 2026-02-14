@@ -1,0 +1,54 @@
+name: trend_scan
+display_name: "趋势扫描"
+owner: l3_data_hunter
+version: "1.0"
+description: |
+  定期扫描电商平台趋势数据，发现潜在爆款信号。
+  每 6 小时自动运行一次 (调度器触发)。
+
+triggers:
+  - schedule: "every_6h"
+  - keyword: ["趋势", "热搜", "爆款", "什么在涨"]
+
+requires_mcp:
+  - playwright
+
+steps:
+  - id: define_search
+    name: "确定扫描范围"
+    action: llm_think
+    prompt: |
+      根据公司知识库中已有的品类、最近的选品方向，确定:
+      1. 需要扫描的平台 (Amazon/TikTok/Shopify)
+      2. 需要监控的品类关键词 (10-20 个)
+      3. 关注的指标 (搜索量变化/新品上架量/评论增长)
+    output: scan_scope
+
+  - id: crawl_trends
+    name: "爬取趋势数据"
+    action: call_mcp
+    server: playwright
+    tool: scrape_trending
+    params:
+      keywords: "{{scan_scope.keywords}}"
+      platforms: "{{scan_scope.platforms}}"
+    output: raw_trends
+
+  - id: analyze_signals
+    name: "识别爆款信号"
+    action: llm_think
+    prompt: |
+      分析爬取的趋势数据，识别:
+      - 搜索量周增 > 30% 的品类
+      - 新品上架激增的品类
+      - 差评多但评分高的品类 (有差异化空间)
+      对每个信号给出: 品类名、信号强度(1-10)、建议行动
+    context: [raw_trends]
+    output: trend_signals
+
+  - id: report_findings
+    name: "上报发现"
+    action: report_up
+    to: CGO
+    content: "{{trend_signals}}"
+    also_broadcast: true

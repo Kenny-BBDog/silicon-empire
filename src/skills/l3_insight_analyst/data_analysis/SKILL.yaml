@@ -1,0 +1,61 @@
+name: data_analysis
+display_name: "数据深度分析"
+owner: l3_insight_analyst
+version: "1.0"
+description: |
+  对结构化数据进行深度分析，产出可执行的洞察报告。
+  支持品类分析、销售趋势、客户画像、ROI 评估。
+
+triggers:
+  - keyword: ["分析", "数据", "报表", "ROI", "趋势分析"]
+  - intent: "DATA_ANALYSIS"
+
+requires_mcp:
+  - postgres
+
+steps:
+  - id: understand_question
+    name: "理解分析需求"
+    action: llm_think
+    prompt: |
+      分析用户的需求，确定:
+      1. 分析类型: 描述性/诊断性/预测性
+      2. 需要的数据源: 哪些表/API
+      3. 关键指标: 什么数字最重要
+      4. 输出格式: 报告/图表/仪表盘
+    output: analysis_plan
+
+  - id: pull_data
+    name: "拉取数据"
+    action: call_db
+    query: "{{analysis_plan.sql_queries}}"
+    output: raw_data
+
+  - id: analyze
+    name: "深度分析"
+    action: llm_think
+    prompt: |
+      对数据进行深度分析:
+      1. 发现模式和趋势
+      2. 找出异常值及其原因
+      3. 计算关键指标
+      4. 与行业基准比对
+      
+      最后给出 3 条可执行建议,
+      每条建议必须回答: 做什么、预期效果、风险
+    context: [raw_data, analysis_plan]
+    output: insights
+
+  - id: compile_report
+    name: "生成分析报告"
+    action: llm_think
+    prompt: |
+      将分析结果整理为结构化报告:
+      ## 核心发现
+      ## 数据详情
+      ## 趋势图表 (用文字描述)
+      ## 建议行动
+      ## 风险提示
+    context: [insights]
+    output: report
+    write_to: artifacts

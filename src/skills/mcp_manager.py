@@ -20,10 +20,11 @@ class MCPManager:
     """
 
     # MCP server definitions — command to launch each server
+    # Can be extended dynamically via register_server()
     SERVER_CONFIGS: dict[str, dict[str, Any]] = {
-        "supabase": {
+        "postgres": {
             "command": "python",
-            "args": ["src/mcp_servers/supabase_server.py"],
+            "args": ["src/mcp_servers/postgres_server.py"],
             "transport": "stdio",
         },
         "playwright": {
@@ -57,6 +58,16 @@ class MCPManager:
             "transport": "stdio",
         },
     }
+
+    @classmethod
+    def register_server(cls, name: str, config: dict[str, Any]) -> None:
+        """动态注册新的 MCP Server (CTO 可用来扩展工具)。"""
+        cls.SERVER_CONFIGS[name] = config
+
+    @classmethod
+    def unregister_server(cls, name: str) -> None:
+        """移除一个 MCP Server。"""
+        cls.SERVER_CONFIGS.pop(name, None)
 
     def __init__(self) -> None:
         self._client = None

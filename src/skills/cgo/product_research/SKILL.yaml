@@ -12,7 +12,7 @@ triggers:
   - keyword: ["选品", "调研", "找产品", "什么好卖"]
 
 requires_mcp:
-  - supabase
+  - postgres
   - playwright
 
 steps:
@@ -42,7 +42,7 @@ steps:
   - id: check_history
     name: "历史数据比对"
     action: call_mcp
-    server: supabase
+    server: postgres
     tool: search_products_vector
     params:
       query: "{{scope_definition.keywords}}"

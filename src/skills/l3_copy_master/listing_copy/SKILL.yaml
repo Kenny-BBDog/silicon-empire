@@ -1,0 +1,75 @@
+name: listing_copy
+display_name: "商品文案创作"
+owner: l3_copy_master
+version: "1.0"
+description: |
+  为电商商品创作高转化文案：标题、五点描述、A+页面、广告语。
+  遵循平台 SEO 规则，融入差异化卖点。
+
+triggers:
+  - keyword: ["文案", "标题", "listing", "五点", "描述", "A+"]
+  - intent: "CONTENT_CREATION"
+
+steps:
+  - id: research_keywords
+    name: "关键词调研"
+    action: llm_think
+    prompt: |
+      基于商品信息，确定:
+      1. 主关键词 (搜索量最大)
+      2. 长尾关键词 (5-10 个)
+      3. 竞品标题分析 (前 5 名怎么写的)
+      4. 差异化卖点提炼
+    output: keyword_research
+
+  - id: write_title
+    name: "写标题"
+    action: llm_think
+    prompt: |
+      创作 5 个备选商品标题:
+      - 融入主关键词 (前置)
+      - 控制在 200 字符以内
+      - 包含品牌名 + 核心功能 + 差异化特征
+      - 避免堆砌关键词感
+    context: [keyword_research]
+    output: titles
+
+  - id: write_bullets
+    name: "写五点描述"
+    action: llm_think
+    prompt: |
+      创作五点描述 (Bullet Points):
+      1. 核心卖点 (解决什么问题)
+      2. 材质/规格 (信任感)
+      3. 使用场景 (想象空间)
+      4. 差异化优势 (为什么选我)
+      5. 售后保障 (消除顾虑)
+      每点以大写关键词开头，控制 200 字符以内。
+    context: [keyword_research]
+    output: bullets
+
+  - id: write_description
+    name: "写详细描述"
+    action: llm_think
+    prompt: |
+      创作商品详细描述:
+      - 故事化开头 (引起共鸣)
+      - 技术参数表
+      - 使用说明
+      - FAQ (3-5 个常见问题)
+      - SEO 优化 (自然融入长尾词)
+    context: [keyword_research, bullets]
+    output: description
+
+  - id: compile_listing
+    name: "汇编完整 Listing"
+    action: llm_think
+    prompt: |
+      将所有内容整合为完整的商品 Listing:
+      ## 推荐标题 (标记最佳选择)
+      ## 五点描述
+      ## 商品描述
+      ## SEO 关键词清单 (竞品分析)
+    context: [titles, bullets, description]
+    output: full_listing
+    write_to: artifacts

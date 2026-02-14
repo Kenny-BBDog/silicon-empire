@@ -1,0 +1,65 @@
+name: batch_listing
+display_name: "批量上架管理"
+owner: l3_store_operator
+version: "1.0"
+description: |
+  批量准备和上架商品：检查数据完整性、生成SKU、同步到Shopify。
+
+triggers:
+  - keyword: ["上架", "批量", "SKU", "发布商品"]
+  - intent: "PRODUCT_LAUNCH"
+
+requires_mcp:
+  - shopify
+  - postgres
+
+steps:
+  - id: validate_data
+    name: "数据完整性检查"
+    action: llm_think
+    prompt: |
+      检查待上架商品数据:
+      1. 必填字段是否齐全 (标题/价格/图片/描述/重量)
+      2. 价格是否合理 (对比成本和竞品)
+      3. 图片数量是否达标 (≥5张)
+      4. 分类和标签是否正确
+      列出所有缺失项和异常
+    output: validation_result
+
+  - id: generate_sku
+    name: "生成 SKU 编号"
+    action: llm_think
+    prompt: |
+      为商品生成 SKU 编号:
+      规则: {品类缩写}-{颜色}-{尺码}-{批次}
+      确保不与现有 SKU 冲突
+    context: [validation_result]
+    output: sku_list
+
+  - id: sync_to_store
+    name: "同步到店铺"
+    action: call_mcp
+    server: shopify
+    tool: create_products_batch
+    params:
+      products: "{{sku_list.products}}"
+    output: sync_result
+
+  - id: verify_listing
+    name: "验证上架成功"
+    action: call_mcp
+    server: shopify
+    tool: get_product_status
+    params:
+      product_ids: "{{sync_result.product_ids}}"
+    output: verification
+
+  - id: report_completion
+    name: "上报完成"
+    action: report_up
+    to: COO
+    content: |
+      批量上架完成:
+      - 成功: {{verification.success_count}}
+      - 失败: {{verification.failure_count}}
+      - 详情: {{verification.failures}}
